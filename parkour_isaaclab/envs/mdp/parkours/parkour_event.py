@@ -125,15 +125,22 @@ class ParkourEvent(ParkourTerm):
         ## we are use reset_root_state events for initalize robot position in a subterrain
         ## original robot root init position is (0,0) in the subterrain axis, so we subtracted off from current robot position 
 
-        start_pos = self.env_origins[env_ids,:2] - \
-                    torch.tensor((self.terrain.cfg.terrain_generator.size[1] + \
-                                  self._reset_offset, 0)).to(self.device)
+        # start_pos = self.env_origins[env_ids,:2] - \
+        #             torch.tensor((self.terrain.cfg.terrain_generator.size[1] + \
+        #                           self._reset_offset, 0)).to(self.device)
 
-        self.dis_to_start_pos = torch.norm(start_pos - self.robot.data.root_pos_w[env_ids, :2], dim=1)
-        threshold = self.env.command_manager.get_command("base_goal")[env_ids, 0] * self.episode_length_s
-        move_up = self.dis_to_start_pos > 0.8*threshold
-        move_down = self.dis_to_start_pos < 0.4*threshold
-
+        # self.dis_to_start_pos = torch.norm(start_pos - self.robot.data.root_pos_w[env_ids, :2], dim=1)
+        # threshold = self.env.command_manager.get_command("base_goal")[env_ids, 0] * self.episode_length_s
+        # move_up = self.dis_to_start_pos > 0.8*threshold
+        # move_down = self.dis_to_start_pos < 0.4*threshold
+        command = self.env.command_manager.get_command("base_goal")
+        target_pos = command[env_ids, 0:3]
+        dis = torch.norm(target_pos, dim=1)
+        move_up = dis < 1.0  # 可调整的阈值  
+        # robots that are far from target go to simpler terrains  
+        move_down = dis > 1.0  # 可调整的阈值
+        move_down *= ~move_up
+        
         robot_root_pos_w = self.robot.data.root_pos_w[:, :2] - self.env_origins[:, :2]
         self.terrain.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
         # # Robots that solve the last level are sent to a random one
@@ -145,6 +152,7 @@ class ParkourEvent(ParkourTerm):
         
         temp = self.terrain_goals[self.terrain.terrain_levels, self.terrain.terrain_types]
         last_col = temp[:, -1].unsqueeze(1)
+        
         self.env_goals[:] = torch.cat((temp, last_col.repeat(1, self.cfg.num_future_goal_obs, 1)), dim=1)[:]
         self.cur_goals = self._gather_cur_goals()
         self.next_goals = self._gather_cur_goals(future=1)

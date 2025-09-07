@@ -1,0 +1,80 @@
+--- git status ---
+On branch master
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   parkour_isaaclab/envs/mdp/parkours/__pycache__/parkour_event.cpython-310.pyc
+	modified:   parkour_isaaclab/envs/mdp/parkours/parkour_event.py
+	modified:   parkour_isaaclab/managers/__pycache__/parkour_reward_manager.cpython-310.pyc
+	modified:   parkour_isaaclab/managers/parkour_reward_manager.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/
+	outputs/2025-09-07/22-01-15/
+	outputs/2025-09-07/22-14-19/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/parkour_isaaclab/envs/mdp/parkours/__pycache__/parkour_event.cpython-310.pyc b/parkour_isaaclab/envs/mdp/parkours/__pycache__/parkour_event.cpython-310.pyc
+index ff1d029..4d0d847 100644
+Binary files a/parkour_isaaclab/envs/mdp/parkours/__pycache__/parkour_event.cpython-310.pyc and b/parkour_isaaclab/envs/mdp/parkours/__pycache__/parkour_event.cpython-310.pyc differ
+diff --git a/parkour_isaaclab/envs/mdp/parkours/parkour_event.py b/parkour_isaaclab/envs/mdp/parkours/parkour_event.py
+index 353d4b8..9d09ee3 100644
+--- a/parkour_isaaclab/envs/mdp/parkours/parkour_event.py
++++ b/parkour_isaaclab/envs/mdp/parkours/parkour_event.py
+@@ -125,15 +125,22 @@ class ParkourEvent(ParkourTerm):
+         ## we are use reset_root_state events for initalize robot position in a subterrain
+         ## original robot root init position is (0,0) in the subterrain axis, so we subtracted off from current robot position 
+ 
+-        start_pos = self.env_origins[env_ids,:2] - \
+-                    torch.tensor((self.terrain.cfg.terrain_generator.size[1] + \
+-                                  self._reset_offset, 0)).to(self.device)
+-
+-        self.dis_to_start_pos = torch.norm(start_pos - self.robot.data.root_pos_w[env_ids, :2], dim=1)
+-        threshold = self.env.command_manager.get_command("base_goal")[env_ids, 0] * self.episode_length_s
+-        move_up = self.dis_to_start_pos > 0.8*threshold
+-        move_down = self.dis_to_start_pos < 0.4*threshold
++        # start_pos = self.env_origins[env_ids,:2] - \
++        #             torch.tensor((self.terrain.cfg.terrain_generator.size[1] + \
++        #                           self._reset_offset, 0)).to(self.device)
+ 
++        # self.dis_to_start_pos = torch.norm(start_pos - self.robot.data.root_pos_w[env_ids, :2], dim=1)
++        # threshold = self.env.command_manager.get_command("base_goal")[env_ids, 0] * self.episode_length_s
++        # move_up = self.dis_to_start_pos > 0.8*threshold
++        # move_down = self.dis_to_start_pos < 0.4*threshold
++        command = self.env.command_manager.get_command("base_goal")
++        target_pos = command[env_ids, 0:3]
++        dis = torch.norm(target_pos, dim=1)
++        move_up = dis < 1.0  # 可调整的阈值  
++        # robots that are far from target go to simpler terrains  
++        move_down = dis > 1.0  # 可调整的阈值
++        move_down *= ~move_up
++        
+         robot_root_pos_w = self.robot.data.root_pos_w[:, :2] - self.env_origins[:, :2]
+         self.terrain.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
+         # # Robots that solve the last level are sent to a random one
+@@ -145,6 +152,7 @@ class ParkourEvent(ParkourTerm):
+         
+         temp = self.terrain_goals[self.terrain.terrain_levels, self.terrain.terrain_types]
+         last_col = temp[:, -1].unsqueeze(1)
++        
+         self.env_goals[:] = torch.cat((temp, last_col.repeat(1, self.cfg.num_future_goal_obs, 1)), dim=1)[:]
+         self.cur_goals = self._gather_cur_goals()
+         self.next_goals = self._gather_cur_goals(future=1)
+diff --git a/parkour_isaaclab/managers/__pycache__/parkour_reward_manager.cpython-310.pyc b/parkour_isaaclab/managers/__pycache__/parkour_reward_manager.cpython-310.pyc
+index 93bca8d..844417b 100644
+Binary files a/parkour_isaaclab/managers/__pycache__/parkour_reward_manager.cpython-310.pyc and b/parkour_isaaclab/managers/__pycache__/parkour_reward_manager.cpython-310.pyc differ
+diff --git a/parkour_isaaclab/managers/parkour_reward_manager.py b/parkour_isaaclab/managers/parkour_reward_manager.py
+index 29193b2..7ce8972 100644
+--- a/parkour_isaaclab/managers/parkour_reward_manager.py
++++ b/parkour_isaaclab/managers/parkour_reward_manager.py
+@@ -35,5 +35,5 @@ class ParkourRewardManager(RewardManager):
+             self._episode_sums[name] += value
+             # Update current reward for this step.
+             self._step_reward[:, term_idx] = value / dt
+-        self._reward_buf[:] = torch.clip(self._reward_buf[:], min=0.)
++        # self._reward_buf[:] = torch.clip(self._reward_buf[:], min=0.)
+         return self._reward_buf
