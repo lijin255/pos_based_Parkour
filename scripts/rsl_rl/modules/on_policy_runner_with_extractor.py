@@ -62,7 +62,7 @@ class OnPolicyRunnerWithExtractor(OnPolicyRunner):
         estimator: DefaultEstimator = estimator_class(**self.estimator_cfg).to(self.device)
         policy_class = eval(self.policy_cfg.pop("class_name"))
         policy: ActorCriticRMA = policy_class(
-                                             num_privileged_obs, self.env.num_actions, **self.policy_cfg
+                                             num_privileged_obs, self.env.num_actions, **self.policy_cfg#TODO：是什么
                                             ).to(self.device)
 
         if "rnd_cfg" in self.alg_cfg and self.alg_cfg["rnd_cfg"] is not None:

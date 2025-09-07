@@ -34,7 +34,7 @@ class ParkourEvent(ParkourTerm):
         self.arrow_num = cfg.arrow_num
         self.env = env 
         self.debug_vis = cfg.debug_vis
-               
+        # print(f"ParkourEvent: debug_vis = {self.debug_vis}")    
         self.robot: Articulation = env.scene[cfg.asset_name]
         # -- metrics
         self.metrics["far_from_current_goal"] = torch.zeros(self.num_envs, device='cpu')
@@ -65,6 +65,7 @@ class ParkourEvent(ParkourTerm):
         
         if self.debug_vis:
             self.total_heights = torch.from_numpy(terrain_generator.goal_heights).to(device = self.device)
+            # print("-------------------------------self.total_heights", self.total_heights)
             self.future_goal_idx = torch.ones(self.num_goals, device=self.device, dtype=torch.bool).repeat(self.num_envs, 1)
             self.future_goal_idx[:, 0] = False
             self.env_per_heights = self.total_heights[self.terrain.terrain_levels, self.terrain.terrain_types]
@@ -73,7 +74,7 @@ class ParkourEvent(ParkourTerm):
         numpy_terrain_levels = self.terrain.terrain_levels.detach().cpu().numpy() ## string type can't convert to torch
         numpy_terrain_types = self.terrain.terrain_types.detach().cpu().numpy()
         self.env_per_terrain_name = self.total_terrain_names[numpy_terrain_levels, numpy_terrain_types]
-        self._reset_offset = self.env.event_manager.get_term_cfg('reset_root_state').params['offset']
+        self._reset_offset = self.env.event_manager.get_term_cfg('reset_root_state').params['offset_y']
 
     def __call__(self):
         self.cur_goals = self._gather_cur_goals()
@@ -96,6 +97,7 @@ class ParkourEvent(ParkourTerm):
                 self.future_goal_idx[tmp_mask, self.cur_goal_idx[tmp_mask]] = False
         self.cur_goal_idx[next_flag] += 1
         self.reach_goal_timer[next_flag] = 0
+        #到达目标检测
         robot_root_pos_w = self.robot.data.root_pos_w[:, :2] - self.env_origins[:, :2]
         self.reached_goal_ids = torch.norm(robot_root_pos_w - self.cur_goals[:, :2], dim=1) < self.next_goal_threshold
         reached_goal_idx = self.reached_goal_ids.nonzero(as_tuple=False).squeeze(-1)
@@ -128,7 +130,7 @@ class ParkourEvent(ParkourTerm):
                                   self._reset_offset, 0)).to(self.device)
 
         self.dis_to_start_pos = torch.norm(start_pos - self.robot.data.root_pos_w[env_ids, :2], dim=1)
-        threshold = self.env.command_manager.get_command("base_velocity")[env_ids, 0] * self.episode_length_s
+        threshold = self.env.command_manager.get_command("base_goal")[env_ids, 0] * self.episode_length_s
         move_up = self.dis_to_start_pos > 0.8*threshold
         move_down = self.dis_to_start_pos < 0.4*threshold
 
@@ -216,6 +218,7 @@ class ParkourEvent(ParkourTerm):
         env_per_xy_goals = env_per_xy_goals + self.env_origins[:, :2].unsqueeze(1)
         goal_height = self.env_per_heights.unsqueeze(-1)*self.terrain.cfg.terrain_generator.vertical_scale
         env_per_goal_pos = torch.concat([env_per_xy_goals, goal_height],dim=-1)
+        # print("env_per_goal_pos", env_per_goal_pos)
         env_per_current_goal_pos = env_per_goal_pos[~self.future_goal_idx, :]
         env_per_future_goal_pos = env_per_goal_pos[self.future_goal_idx, :] .reshape(-1,3)
         self.current_goal_pose_visualizer.visualize(

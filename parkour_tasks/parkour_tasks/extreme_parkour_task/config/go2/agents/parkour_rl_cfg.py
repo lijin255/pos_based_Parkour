@@ -20,10 +20,10 @@ RslRlPpoAlgorithmCfg,
 #########################
 
 @configclass
-class ParkourRslRlBaseCfg:
+class ParkourRslRlBaseCfg:#需要改
     num_priv_explicit: int = 3 + 3 + 3 # 9
     num_priv_latent: int = 4 + 1 + 12 +12 # 29
-    num_prop: int = 3 + 2 + 3 + 4 + 36 + 5 # 53
+    num_prop: int = 3 + 2 + 3 + 4 + 36 + 6 # 54
     num_scan: int = 132
     num_hist: int = 10
     

@@ -47,16 +47,22 @@ def reset_joints_by_offset(
 def reset_root_state(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor,
+    # pose_range: dict[str, tuple[float, float]],
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    offset: float = 3.0
+    offset_x: float= 0.0,
+    offset_y: float= 0.0
+
 ):
     asset: Articulation = env.scene[asset_cfg.name]
-    terrain_gen_cfg = env.scene.terrain.cfg.terrain_generator
     root_states = asset.data.default_root_state[env_ids].clone()
+    root_states[:,0] -= offset_x
+    root_states[:,1] -= offset_y
     origin = env.scene.env_origins[env_ids].clone()
     origin[:,-1] = 0
-    positions = root_states[:, 0:3] + origin - \
-        torch.tensor((terrain_gen_cfg.size[1] + offset, 0, 0)).to(env.device)
+
+    # positions = root_states[:, 0:3] + origin - \
+    #     torch.tensor((terrain_gen_cfg.size[1] + offset, 0, 0)).to(env.device)
+    positions = root_states[:, 0:3] + env.scene.env_origins[env_ids]
     asset.write_root_pose_to_sim(torch.cat([positions, root_states[:, 3:7]], dim=-1), env_ids=env_ids)
     asset.write_root_velocity_to_sim(root_states[:, 7:13] , env_ids=env_ids) ## it mush need for init vel
 

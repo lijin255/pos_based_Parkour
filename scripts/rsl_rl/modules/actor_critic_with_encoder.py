@@ -98,7 +98,7 @@ class Actor(nn.Module):
                 scan_latent = self.scan_encoder(obs_scan)   
             else:
                 scan_latent = scandots_latent
-            obs_prop_scan = torch.cat([obs[:, :self.num_prop], scan_latent], dim=1)
+            obs_prop_scan = torch.cat([obs[:, :self.num_prop], scan_latent], dim=1)#取前面prop和scan编码后的拼接
         else:
             obs_prop_scan = obs[:, :self.num_prop + self.num_scan]
         obs_priv_explicit = obs[:, self.num_prop + self.num_scan:self.num_prop + self.num_scan + self.num_priv_explicit]
@@ -115,7 +115,7 @@ class Actor(nn.Module):
         return self.priv_encoder(priv)
     
     def infer_hist_latent(self, obs):
-        hist = obs[:, -self.num_hist*self.num_prop:]
+        hist = obs[:, -self.num_hist*self.num_prop:]#直接取最后的历史部分
         return self.history_encoder(hist.view(-1, self.num_hist, self.num_prop))
     
     def infer_scandots_latent(self, obs):

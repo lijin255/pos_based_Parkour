@@ -9,8 +9,8 @@ class ExtremeParkourRoughTerrainCfg(ParkourSubTerrainBaseCfg):
     downsampled_scale: float | None = 0.075
     noise_range: tuple[float,float] = (0.02, 0.06)
     noise_step: float = 0.005
-    x_range: tuple[float, float] = (0.8, 1.5)
-    y_range: tuple[float, float] = (-0.4, 0.4)
+    x_range: tuple[float, float] = (-0.4, 0.4)
+    y_range: tuple[float, float] = (0.8, 1.5)
     half_valid_width: tuple[float, float] = (0.6, 1.2)
     pad_width: float = 0.1 
     pad_height: float = 0.0

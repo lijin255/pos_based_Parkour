@@ -98,7 +98,7 @@ class UnitreeGo2StudentParkourEnvCfg_PLAY(UnitreeGo2StudentParkourEnvCfg):
         self.events.physics_material = None
         self.events.push_by_setting_velocity = None
         self.events.random_camera_position.params['rot_noise_range'] = {'pitch':(0, 0)}
-        self.commands.base_velocity.resampling_time_range = (60.,60.)
+        # self.commands.base_velocity.resampling_time_range = (60.,60.)
         self.episode_length_s = 60.
 
         for key, sub_terrain in self.scene.terrain.terrain_generator.sub_terrains.items():

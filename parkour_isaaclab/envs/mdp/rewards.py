@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from isaaclab.managers import ManagerTermBase, SceneEntityCfg
 from isaaclab.sensors import ContactSensor
 from isaaclab.assets import Articulation
-from isaaclab.utils.math  import euler_xyz_from_quat, wrap_to_pi, quat_apply
+from isaaclab.utils.math import euler_xyz_from_quat, wrap_to_pi, quat_apply
 from parkour_isaaclab.envs.mdp.parkours import ParkourEvent 
 from collections.abc import Sequence
 
@@ -166,20 +166,20 @@ def reward_feet_stumble(
             4 *torch.abs(net_contact_forces[:, :, 2]), dim=1)
     return rew.float()
 
-def reward_tracking_goal_vel(
-    env: ParkourManagerBasedRLEnv, 
-    parkour_name : str, 
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    ) -> torch.Tensor:
-    asset: Articulation = env.scene[asset_cfg.name]
-    parkour_event: ParkourEvent = env.parkour_manager.get_term(parkour_name)
-    target_pos_rel = parkour_event.target_pos_rel
-    target_vel = target_pos_rel / (torch.norm(target_pos_rel, dim=-1, keepdim=True) + 1e-5)
-    cur_vel = asset.data.root_vel_w[:, :2]
-    proj_vel = torch.sum(target_vel * cur_vel, dim=-1)
-    command_vel = env.command_manager.get_command('base_velocity')[:, 0]
-    rew_move = torch.minimum(proj_vel, command_vel) / (command_vel + 1e-5)
-    return rew_move
+# def reward_tracking_goal_vel(
+#     env: ParkourManagerBasedRLEnv, 
+#     parkour_name : str, 
+#     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+#     ) -> torch.Tensor:
+#     asset: Articulation = env.scene[asset_cfg.name]
+#     parkour_event: ParkourEvent = env.parkour_manager.get_term(parkour_name)
+#     target_pos_rel = parkour_event.target_pos_rel
+#     target_vel = target_pos_rel / (torch.norm(target_pos_rel, dim=-1, keepdim=True) + 1e-5)
+#     cur_vel = asset.data.root_vel_w[:, :2]
+#     proj_vel = torch.sum(target_vel * cur_vel, dim=-1)
+#     command_vel = env.command_manager.get_command('base_velocity')[:, 0]
+#     rew_move = torch.minimum(proj_vel, command_vel) / (command_vel + 1e-5)
+#     return rew_move
 
 def reward_tracking_yaw(     
     env: ParkourManagerBasedRLEnv, 
@@ -219,3 +219,217 @@ def reward_collision(
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     net_contact_forces = contact_sensor.data.net_forces_w_history[:,0,sensor_cfg.body_ids]
     return torch.sum(1.*(torch.norm(net_contact_forces, dim=-1) > 0.1), dim=1)
+
+# -------------------positon_reward-------------------------
+class GoalProgressTracker(ManagerTermBase):
+    """
+    用于获取机器人跑酷任务中每个环境的目标点位置信息的类
+    """
+    
+    def __init__(self, cfg: RewardTermCfg, env: ParkourManagerBasedRLEnv):
+        """
+        初始化目标位置跟踪器
+        
+        Args:
+            cfg: 奖励项配置
+            env: 跑酷环境实例
+        """
+        super().__init__(cfg, env)
+        
+        # 获取相关组件
+        self.asset: Articulation = env.scene[cfg.params["asset_cfg"].name]
+        self.parkour_event: ParkourEvent = env.parkour_manager.get_term('base_parkour')
+        
+        # 初始化数据
+        self.current_goal_position = self.get_current_goal_position()
+        self.reached_goals_count = self.get_reached_goals_count()
+        self.current_goal_distance = self.get_current_goal_distance()
+
+        
+    def __call__(
+        self,
+        env: ParkourManagerBasedRLEnv,
+        asset_cfg: SceneEntityCfg,
+        parkour_name: str,
+    ) -> torch.Tensor:
+        """
+        调用三个方法并打印出值，返回1
+        """
+        # 调用三个方法获取最新数据
+        current_goal_pos = self.get_current_goal_position()
+        reached_count = self.get_reached_goals_count()
+        goal_distance = self.get_current_goal_distance()
+        base_reward = reached_count * 0.2
+        # 基于距离计算奖励：距离越小奖励越大，无限接近时奖励为1
+        change_reward = 0.2*torch.exp(-goal_distance) 
+        # change_reward 
+        # 打印前四个环境的信息
+        # num_envs_to_print = min(4, env.num_envs)
+        # if num_envs_to_print > 0:
+        #     print("=" * 60)
+        #     print("=== GoalProgressTracker Info (First 4 Envs) ===")
+        #     for i in range(num_envs_to_print):
+        #         print(f"--- Environment {i} ---")
+        #         print(f"Current Goal Position: [{current_goal_pos[i, 0].item():.3f}, {current_goal_pos[i, 1].item():.3f}, {current_goal_pos[i, 2].item():.3f}]")
+        #         print(f"Reached Goals Count: {reached_count[i].item()}")
+        #         print(f"Current Goal Distance: {goal_distance[i].item():.3f}m")
+        #         print(f"Distance Reward: {change_reward[i].item():.4f}")
+        #         print()
+        #     print("=" * 60)
+        # print("reward shape",change_reward.shape)
+        return base_reward + change_reward
+    
+    def get_current_goal_position(self) -> torch.Tensor:
+        """
+        获得当前目标点的坐标
+        
+        Returns:
+            当前目标点的世界坐标 (x, y, z)
+        """
+        current_goals_local = self.parkour_event.cur_goals  # 相对于环境原点的位置
+        env_origins = self.parkour_event.env_origins  # 环境原点的世界坐标
+        
+        # 转换为世界坐标
+        current_goals_world = torch.zeros(self.num_envs, 3, device=self.device)
+        current_goals_world[:, :2] = current_goals_local[:, :2] + env_origins[:, :2]
+        current_goals_world[:, 2] = current_goals_local[:, 2]  # 高度信息
+        
+        return current_goals_world
+    
+    def get_reached_goals_count(self) -> torch.Tensor:
+        """
+        获得当前已经达到的目标数
+        
+        Returns:
+            已达到的目标点数量张量
+        """
+        total_goals = self.parkour_event.num_goals
+        current_goal_idx = self.parkour_event.cur_goal_idx
+        
+        # 如果当前目标索引 >= 总目标数，说明已经完成所有目标
+        reach_goal_cutoff = current_goal_idx >= total_goals
+        
+        # 已达到的目标数 = min(当前目标索引, 总目标数)
+        reached_count = torch.where(reach_goal_cutoff, 
+                                  torch.full_like(current_goal_idx, total_goals), 
+                                  current_goal_idx)
+        
+        return reached_count.float()
+    
+    def get_current_goal_distance(self) -> torch.Tensor:
+        """
+        获得当前目标点和机器人的相对距离
+        
+        Returns:
+            当前目标点和机器人的距离张量
+        """
+        # 获取机器人当前位置（世界坐标系）
+        robot_pos_w = self.asset.data.root_pos_w[:, :3]
+        # 获取当前目标点的世界坐标
+        current_goal_pos = self.get_current_goal_position()
+        relative_distance = torch.norm(current_goal_pos[:, :3] - robot_pos_w[:, :3], dim=1)
+        
+        return relative_distance
+    
+def far_but_stop(  
+    env:ParkourManagerBasedRLEnv,  
+    command_name: str,  
+    dist_threshold: float = 0.5,  # 距离阈值，超过此值认为"较远"  
+    vel_threshold: float = 0.1,   # 速度阈值，低于此值认为"很小"  
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),  
+) -> torch.Tensor:  
+    """当机器人离目标较远且正向速度很小时提供-1惩罚，其他情况为0"""  
+      
+    # 提取相关实体和命令  
+    asset: Articulation = env.scene[asset_cfg.name]  
+    command = env.command_manager.get_command(command_name)  
+      
+    # 计算到目标的距离  
+    target_pos = command[:, :2]  # 三维目标位置  
+    pos_dist = torch.norm(target_pos, dim=1)  
+      
+    # 获取机器人正向速度  
+    forward_vel = asset.data.root_lin_vel_b[:, 0]  
+    # print("forward velocity:", forward_vel)
+    # 判断条件  
+    far_from_target = pos_dist > dist_threshold  
+    slow_motion = forward_vel < vel_threshold  
+      
+    # 同时满足两个条件时给予-1惩罚，否则为0  
+    penalty_condition = far_from_target & slow_motion  
+      
+    penalty = torch.where(  
+        penalty_condition,  
+        torch.full_like(pos_dist, -1.0),  # 恒定-1惩罚  
+        torch.zeros_like(pos_dist)        # 其他情况为0  
+    )  
+      
+    return penalty
+
+def reward_distance(
+    env: ParkourManagerBasedRLEnv,
+    command_name: str,
+    Tr: float = 2.0,  # 开始计算奖励的时间阈值（秒）
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """
+    基于公式的任务奖励函数：
+    r_task = {
+        1/Tr * 1/(1 + ||xb - xb*||^2),  if t > T - Tr
+        0,                              otherwise
+    }
+    
+    Args:
+        env: 环境实例
+        command_name: 命令名称
+        Tr: 开始计算奖励的时间阈值（秒）
+        asset_cfg: 机器人配置
+        
+    Returns:
+        奖励张量
+    """
+    # 获取相关实体和命令
+    asset: Articulation = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    
+    # 计算当前时间 t（从episode开始算起，单位：秒）
+    dt = env.cfg.decimation * env.cfg.sim.dt  # 每个控制步的时间
+    current_time = env.episode_length_buf * dt  # 当前episode时间
+    
+    # 计算最大episode时间 T（秒）
+    max_episode_time = env.max_episode_length * dt
+    
+    # 判断是否满足时间条件：t > T - Tr
+    time_condition = current_time > (max_episode_time - Tr)
+    
+    # 计算 ||xb - xb*||^2，使用command的norm来表示机器人当前位置与目标位置的差
+    # command[:, :3] 通常包含目标位置相对于当前位置的差值
+    position_error_norm = torch.norm(command[:, :3], dim=1)  # ||xb - xb*||
+    position_error_squared = position_error_norm ** 2  # ||xb - xb*||^2
+    reward_value = (1.0 / Tr) * (1.0 / (1.0 + position_error_squared))
+    # 只在满足时间条件时给予奖励，否则为0
+    reward = torch.where(
+        time_condition,
+        reward_value,
+        torch.zeros_like(reward_value)
+    )
+    # print("reward_task_formula:", reward)
+    return reward
+
+def stand_still_without_cmd(
+    env:ParkourManagerBasedRLEnv,
+    command_name: str,
+    command_threshold: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """惩罚机器人在没有命令的情况下运动."""
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    # compute out of limits constraints
+    diff_angle = asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+    reward = torch.sum(torch.abs(diff_angle), dim=1)
+    command = env.command_manager.get_command(command_name)
+    pose_command = command[:, :3]
+    reward *= torch.norm(pose_command, dim=1) < command_threshold
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward

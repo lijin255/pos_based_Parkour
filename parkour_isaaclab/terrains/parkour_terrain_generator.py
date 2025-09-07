@@ -47,6 +47,8 @@ class ParkourTerrainGenerator(TerrainGenerator):
             self.terrain_names[sub_row, sub_col] = sub_terrains_name
             self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrain_goal)
             self.goal_heights[sub_row, sub_col, :] = goal_heights
+            print("_generate_random_terrains goal_heights", goal_heights)
+            print("_generate_random_terrains self.goal_heights", self.goal_heights)
             self.x_edge_maskes[sub_row, sub_col,: ,:] = x_edge_mask 
 
     def _generate_curriculum_terrains(self):
@@ -97,6 +99,7 @@ class ParkourTerrainGenerator(TerrainGenerator):
         # generate hash for the sub-terrain
         # generate the terrain
         meshes, origin, goals, goal_heights, x_edge_mask = cfg.function(difficulty, cfg, self.num_goals)
+        print("_get_terrain_mesh goal_heights", goal_heights)
         mesh = trimesh.util.concatenate(meshes)
         # offset mesh such that they are in their center
         transform = np.eye(4)

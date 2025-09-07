@@ -71,44 +71,44 @@ def parkour_gap_terrain(
         width_pixels = int(cfg.size[0] / cfg.horizontal_scale)
         length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
         height_field_raw = np.zeros((width_pixels, length_pixels))
-        mid_y = length_pixels // 2  # length is actually y width
+        mid_x = length_pixels // 2  # length is actually y width
         gap_size = eval(cfg.gap_size,{"difficulty":difficulty})
         gap_size = round(gap_size / cfg.horizontal_scale)
 
-        dis_x_min = round(cfg.x_range[0] / cfg.horizontal_scale) + gap_size
-        dis_x_max = round(cfg.x_range[1] / cfg.horizontal_scale) + gap_size
+        dis_x_min = round(cfg.x_range[0] / cfg.horizontal_scale) 
+        dis_x_max = round(cfg.x_range[1] / cfg.horizontal_scale) 
 
-        dis_y_min = round(cfg.y_range[0] / cfg.horizontal_scale)
-        dis_y_max = round(cfg.y_range[1] / cfg.horizontal_scale)
+        dis_y_min = round(cfg.y_range[0] / cfg.horizontal_scale)+ gap_size
+        dis_y_max = round(cfg.y_range[1] / cfg.horizontal_scale)+ gap_size
 
         platform_len = round(cfg.platform_len / cfg.horizontal_scale)
         platform_height = round(cfg.platform_height / cfg.vertical_scale)
-        height_field_raw[0:platform_len, :] = platform_height
+        height_field_raw[:,0:platform_len,] = platform_height
 
         gap_depth = -round(np.random.uniform(cfg.gap_depth[0], cfg.gap_depth[1]) / cfg.vertical_scale)
         half_valid_width = round(np.random.uniform(cfg.half_valid_width[0], cfg.half_valid_width[1]) / cfg.horizontal_scale)
         goals = np.zeros((num_goals, 2))
         goal_heights = np.ones((num_goals)) * platform_height
-        goals[0] = [platform_len - 1, mid_y]
-        dis_x = platform_len
-        last_dis_x = dis_x
+        goals[0] = [mid_x,platform_len - 1]
+        dis_y = platform_len
+        last_dis_y = dis_y
         for i in range(num_goals - 2):
-            rand_x = np.random.randint(dis_x_min, dis_x_max)
-            dis_x += rand_x
             rand_y = np.random.randint(dis_y_min, dis_y_max)
+            dis_y += rand_y
+            rand_x = np.random.randint(dis_x_min, dis_x_max)
             if not cfg.apply_flat:
-                height_field_raw[dis_x-gap_size//2 : dis_x+gap_size//2, :] = gap_depth
+                height_field_raw[dis_y-gap_size//2 : dis_y+gap_size//2, :] = gap_depth
 
-            height_field_raw[last_dis_x:dis_x, :mid_y+rand_y-half_valid_width] = gap_depth
-            height_field_raw[last_dis_x:dis_x, mid_y+rand_y+half_valid_width:] = gap_depth
+            height_field_raw[:mid_x+rand_x-half_valid_width, last_dis_y:dis_y] = gap_depth
+            height_field_raw[mid_x+rand_x+half_valid_width:,last_dis_y:dis_y ] = gap_depth
             
-            last_dis_x = dis_x
-            goals[i+1] = [dis_x-rand_x//2, mid_y + rand_y]
-        final_dis_x = dis_x + np.random.randint(dis_x_min, dis_x_max)
+            last_dis_y = dis_y
+            goals[i+1] = [mid_x + rand_x, dis_y-rand_y//2]
+        final_dis_y = dis_y + np.random.randint(dis_y_min, dis_y_max)
 
-        if final_dis_x > width_pixels:
-            final_dis_x = width_pixels - 0.5 // cfg.horizontal_scale
-        goals[-1] = [final_dis_x, mid_y]
+        if final_dis_y > width_pixels:
+            final_dis_y = width_pixels - 0.5 // cfg.horizontal_scale
+        goals[-1] = [mid_x, final_dis_y]
         height_field_raw = padding_height_field_raw(height_field_raw,cfg)
         if cfg.apply_roughness:
             height_field_raw = random_uniform_terrain(difficulty, cfg, height_field_raw)
@@ -128,11 +128,11 @@ def parkour_hurdle_terrain(
         length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
         height_field_raw = np.zeros((width_pixels, length_pixels))
 
-        mid_y = length_pixels // 2  # length is actually y width
-        dis_x_min = round(cfg.x_range[0] / cfg.horizontal_scale)
-        dis_x_max = round(cfg.x_range[1] / cfg.horizontal_scale) 
-        dis_y_min = round(cfg.y_range[0] / cfg.horizontal_scale)
-        dis_y_max = round(cfg.y_range[1] / cfg.horizontal_scale)
+        mid_x = width_pixels // 2  # x方向的中心线
+        # dis_x_min = round(cfg.x_range[0] / cfg.horizontal_scale)
+        # dis_x_max = round(cfg.x_range[1] / cfg.horizontal_scale) 
+        # dis_y_min = round(cfg.y_range[0] / cfg.horizontal_scale)
+        # dis_y_max = round(cfg.y_range[1] / cfg.horizontal_scale)
 
         half_valid_width = round(np.random.uniform(cfg.half_valid_width[0], cfg.half_valid_width[1]) / cfg.horizontal_scale)
         hurdle_height_range = eval(cfg.hurdle_height_range, {"difficulty": difficulty})
@@ -141,31 +141,37 @@ def parkour_hurdle_terrain(
 
         platform_len = round(cfg.platform_len / cfg.horizontal_scale)
         platform_height = round(cfg.platform_height / cfg.vertical_scale)
-        height_field_raw[0:platform_len, :] = platform_height
-        dis_x = platform_len
+        base_height = round(0.3 / cfg.vertical_scale)
+        height_field_raw[:, 0:platform_len] = platform_height
+        
         goals = np.zeros((num_goals, 2))
-        goal_heights = np.ones((num_goals)) * platform_height
+        goal_heights = np.ones((num_goals)) * platform_height + base_height
 
-        goals[0] = [platform_len - 1, mid_y]
+        # 在y方向除去最开始和最后一米的区域均匀分布目标点
+        margin_pixels = round(1.0 / cfg.horizontal_scale)  # 一米的像素数
+        y_start = margin_pixels
+        y_end = length_pixels - margin_pixels
+        y_positions = np.linspace(y_start, y_end, num_goals)
 
-        for i in range(num_goals-2):
-            rand_x = np.random.randint(dis_x_min, dis_x_max)
-            rand_y = np.random.randint(dis_y_min, dis_y_max)
-            dis_x += rand_x
-            if not cfg.apply_flat:
-                height_field_raw[dis_x-stone_len//2:dis_x+stone_len//2, ] = np.random.randint(hurdle_height_min, hurdle_height_max)
-                height_field_raw[dis_x-stone_len//2:dis_x+stone_len//2, :mid_y+rand_y-half_valid_width] = 0
-                height_field_raw[dis_x-stone_len//2:dis_x+stone_len//2, mid_y+rand_y+half_valid_width:] = 0
-            goals[i+1] = [dis_x-rand_x//2, mid_y + rand_y]
-        final_dis_x = dis_x + np.random.randint(dis_x_min, dis_x_max)
-
-        if final_dis_x > width_pixels:
-            final_dis_x = width_pixels - 0.5 // cfg.horizontal_scale
-        goals[-1] = [final_dis_x, mid_y]
+        for i in range(num_goals):
+            y_pos = int(y_positions[i])
+            goals[i] = [mid_x, y_pos]
+            
+            # 为中间的目标点生成障碍物（避开起始和结束区域）
+            if y_pos > platform_len and y_pos < length_pixels - platform_len:
+                if not cfg.apply_flat:
+                    # 在整个x方向生成障碍物
+                    height_field_raw[:, y_pos-stone_len//2:y_pos+stone_len//2] = np.random.randint(hurdle_height_min, hurdle_height_max)
+                    # 在中心x位置留出通道
+                    height_field_raw[mid_x-half_valid_width:mid_x+half_valid_width, y_pos-stone_len//2:y_pos+stone_len//2] = 0
+        
+        # 将最后一个目标点位置设置为倒数第二个目标点的位置
+        if num_goals >= 2:
+            goals[-1] = goals[-2]
         height_field_raw = padding_height_field_raw(height_field_raw,cfg)
         if cfg.apply_roughness:
             height_field_raw = random_uniform_terrain(difficulty, cfg, height_field_raw)
-        return height_field_raw, goals * cfg.horizontal_scale, goal_heights * cfg.vertical_scale
+        return height_field_raw, goals * cfg.horizontal_scale, goal_heights 
 
 
 @parkour_field_to_mesh
@@ -266,7 +272,7 @@ def parkour_terrain(
         goals[0] = [platform_len -  stone_len // 2, mid_y]
         left_right_flag = np.random.randint(0, 2)
         dis_z = 0
-        num_stones = num_goals - 2
+        num_stones = num_goals - 1
         for i in range(num_stones):
             dis_x += np.random.randint(dis_x_min, dis_x_max)
             pos_neg = round(2*(left_right_flag - 0.5))

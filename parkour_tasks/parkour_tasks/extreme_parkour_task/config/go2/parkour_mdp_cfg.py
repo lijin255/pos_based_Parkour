@@ -9,29 +9,44 @@ from isaaclab.envs.mdp.events import (
 randomize_rigid_body_mass,
 apply_external_force_torque,
 reset_joints_by_scale
-
-)
+) 
 from isaaclab.envs.mdp.rewards import undesired_contacts
 from parkour_isaaclab.envs.mdp.parkour_actions import DelayedJointPositionActionCfg 
 from parkour_isaaclab.envs.mdp import terminations, rewards, parkours, events, observations, parkour_commands
-
+from isaaclab.envs.mdp.commands.commands_cfg import TerrainBasedPose2dCommandCfg,UniformPose2dCommandCfg
+import math
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    base_velocity = parkour_commands.ParkourCommandCfg(
+    # base_velocity = parkour_commands.ParkourCommandCfg(
+    #     asset_name="robot",
+    #     resampling_time_range=(6.0,6.0 ),
+    #     heading_control_stiffness=0.8,
+    #     ranges=parkour_commands.ParkourCommandCfg.Ranges(
+    #         lin_vel_x=(0.3, 0.8), 
+    #         heading=(-1.6, 1.6)
+    #     ),
+    #     clips= parkour_commands.ParkourCommandCfg.Clips(
+    #         lin_vel_clip = 0.2,
+    #         ang_vel_clip = 0.4
+    #     )
+    # )
+    # base_goal = TerrainBasedPose2dCommandCfg(
+    #     asset_name="robot",
+    #     resampling_time_range=(20.0, 20.0),
+    #     simple_heading=True,
+    #     debug_vis=True,
+    #     ranges=TerrainBasedPose2dCommandCfg.Ranges(heading=(-math.pi, math.pi)),
+    # ) 
+    base_goal = UniformPose2dCommandCfg(
         asset_name="robot",
-        resampling_time_range=(6.0,6.0 ),
-        heading_control_stiffness=0.8,
-        ranges=parkour_commands.ParkourCommandCfg.Ranges(
-            lin_vel_x=(0.3, 0.8), 
-            heading=(-1.6, 1.6)
-        ),
-        clips= parkour_commands.ParkourCommandCfg.Clips(
-            lin_vel_clip = 0.2,
-            ang_vel_clip = 0.4
-        )
+        resampling_time_range=(20.0, 20.0),
+        simple_heading=True,
+        debug_vis=True,
+        ranges=UniformPose2dCommandCfg.Ranges( pos_x=(-0.5, 0.5),pos_y=(4.5, 5.0), heading=(-math.pi, math.pi)),
     )
+    base_goal.goal_pose_visualizer_cfg.markers["arrow"].scale = (0.3, 0.3, 0.5)  # 增大标记
 
 @configclass
 class ParkourEventsCfg:
@@ -137,6 +152,42 @@ class TeacherRewardsCfg:
     'RR_foot']
     """
 # Available Body strings: 
+    goal = RewTerm(
+        func=rewards.GoalProgressTracker,
+        weight=1.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "parkour_name": "base_parkour"
+        }
+    )
+    far_but_stop = RewTerm(  
+        func=rewards.far_but_stop,  
+        weight=1.0,  # 权重为1，因为函数本身已经返回-1  
+        params={  
+            "command_name": "base_goal",  
+            "dist_threshold": 0.5,  
+            "vel_threshold": 0.15,  
+            "asset_cfg": SceneEntityCfg("robot"),  
+        }
+    )  
+    stand_still_without_cmd = RewTerm(
+        func=rewards.stand_still_without_cmd,
+        weight=1.0,
+        params={  
+            "command_name": "base_goal",  
+            "command_threshold": 0.15,    
+            "asset_cfg": SceneEntityCfg("robot")  
+        }, 
+    )
+    reward_distance_to_goal = RewTerm(
+        func=rewards.reward_distance,
+        weight=3.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "command_name": 'base_goal',
+        }
+    )
+    # -------------------------------------------------
     reward_collision = RewTerm(
         func=rewards.reward_collision, 
         weight=-10., 
@@ -218,14 +269,14 @@ class TeacherRewardsCfg:
             "sensor_cfg":SceneEntityCfg("contact_forces", body_names=".*_foot"),
         },
     )
-    reward_tracking_goal_vel = RewTerm(
-        func=rewards.reward_tracking_goal_vel, 
-        weight=1.5, 
-        params={
-            "asset_cfg":SceneEntityCfg("robot"),
-            "parkour_name":'base_parkour'
-        },
-    )
+    # reward_tracking_goal_vel = RewTerm(
+    #     func=rewards.reward_tracking_goal_vel, 
+    #     weight=1.5, 
+    #     params={
+    #         "asset_cfg":SceneEntityCfg("robot"),
+    #         "parkour_name":'base_parkour'
+    #     },
+    # )
     reward_tracking_yaw = RewTerm(
         func=rewards.reward_tracking_yaw, 
         weight=0.5, 
@@ -260,9 +311,26 @@ class EventCfg:
     """Configuration for events."""
     reset_root_state = EventTerm(
         func= events.reset_root_state,
-        params = {'offset': 3.},
+        params = {'offset_x': 0.0, 'offset_y': 3.5},#原点位置减去
         mode="reset",
     )
+    # import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
+    # reset_root_state = EventTerm(
+    #     func=mdp.reset_root_state_uniform,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "pose_range": {"x": (-0.5, 0.5), "y": (-3, -4), "yaw": (-3.14/2, 3.14/2)},
+    #         "velocity_range": {
+    #             "x": (-1.5, 1.5),
+    #             "y": (-1.0, 1.0),
+    #             "z": (-0.5, 0.5),
+    #             "roll": (-0.7, 0.7),
+    #             "pitch": (-0.7, 0.7),
+    #             "yaw": (-1.0, 1.0),
+    #         },
+    #     },
+    # )
     reset_robot_joints = EventTerm(
         func= reset_joints_by_scale, 
         params={

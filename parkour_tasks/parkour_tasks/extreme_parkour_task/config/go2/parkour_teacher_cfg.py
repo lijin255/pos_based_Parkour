@@ -5,16 +5,18 @@ from isaaclab.utils import configclass
 # Pre-defined configs
 ##
 from parkour_isaaclab.terrains.extreme_parkour.config.parkour import EXTREME_PARKOUR_TERRAINS_CFG  # isort: skip
+from parkour_isaaclab.terrains.extreme_parkour.config.parkour import My_TERRAINS_CFG  # isort: skip
 from parkour_isaaclab.envs import ParkourManagerBasedRLEnvCfg
 from .parkour_mdp_cfg import * 
 from parkour_tasks.default_cfg import ParkourDefaultSceneCfg, VIEWER
 
 @configclass
 class ParkourTeacherSceneCfg(ParkourDefaultSceneCfg):
+    
     height_scanner = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=(0.375, 0.0, 20.0)),
-        attach_yaw_only=True,
+        ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.15, size=[1.65, 1.5]),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
@@ -27,11 +29,12 @@ class ParkourTeacherSceneCfg(ParkourDefaultSceneCfg):
                                       )
     def __post_init__(self):
         super().__post_init__()
-        self.terrain.terrain_generator = EXTREME_PARKOUR_TERRAINS_CFG
+        # self.terrain.terrain_generator = EXTREME_PARKOUR_TERRAINS_CFG
+        self.terrain.terrain_generator = My_TERRAINS_CFG
         
 @configclass
 class UnitreeGo2TeacherParkourEnvCfg(ParkourManagerBasedRLEnvCfg):
-    viewer = VIEWER 
+    # viewer = VIEWER 
     scene: ParkourTeacherSceneCfg = ParkourTeacherSceneCfg(num_envs=6144, env_spacing=1.)
     # Basic settings
     observations: TeacherObservationsCfg = TeacherObservationsCfg()
@@ -46,8 +49,9 @@ class UnitreeGo2TeacherParkourEnvCfg(ParkourManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
+        self.parkours.base_parkour.debug_vis = True
         self.decimation = 4
-        self.episode_length_s = 20.0
+        self.episode_length_s = 12.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
@@ -68,27 +72,27 @@ class UnitreeGo2TeacherParkourEnvCfg_PLAY(UnitreeGo2TeacherParkourEnvCfg):
         super().__post_init__()
 
         # make a smaller scene for play
-        self.parkours.base_parkour.debug_vis = True
-        self.commands.base_velocity.debug_vis = True
+        # self.parkours.base_parkour.debug_vis = True
+        # self.commands.base_velocity.debug_vis = True
 
-        self.scene.num_envs = 16
+        self.scene.num_envs = 4
         # spawn the robot randomly in the grid (instead of their terrain levels)
         # self.scene.terrain.max_init_terrain_level = None
         if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 5
-            self.scene.terrain.terrain_generator.num_cols = 5
+            self.scene.terrain.terrain_generator.num_rows = 2
+            self.scene.terrain.terrain_generator.num_cols = 2
             self.scene.terrain.terrain_generator.random_difficulty = True
             self.scene.terrain.terrain_generator.difficulty_range = (0.0,0.3)
             self.scene.terrain.terrain_generator.curriculum = False
         self.observations.policy.enable_corruption = False
         self.events.randomize_rigid_body_com = None
         self.events.randomize_rigid_body_mass = None
-        self.commands.base_velocity.resampling_time_range = (60.,60.)
+        # self.commands.base_velocity.resampling_time_range = (60.,60.)
         self.episode_length_s = 60.
 
-        for key, sub_terrain in self.scene.terrain.terrain_generator.sub_terrains.items():
-            if key =='parkour_flat':
-                sub_terrain.proportion = 0.0
-            else:
-                sub_terrain.proportion = 0.2
-                sub_terrain.noise_range = (0.02, 0.02)
+        # for key, sub_terrain in self.scene.terrain.terrain_generator.sub_terrains.items():
+        #     if key =='parkour_flat':
+        #         sub_terrain.proportion = 0.0
+        #     else:
+        #         sub_terrain.proportion = 0.2
+        #         sub_terrain.noise_range = (0.02, 0.02)
