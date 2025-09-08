@@ -69,25 +69,34 @@ def centerplatform_terrain(
     # 生成高度场数组    
     width_pixels = int(cfg.size[0] / cfg.horizontal_scale)    
     length_pixels = int(cfg.size[1] / cfg.horizontal_scale)    
-    offset = int(3.0 / cfg.horizontal_scale)
+    offset = int(1.0 / cfg.horizontal_scale)
+    heght_offset = int(0.3 / cfg.vertical_scale)
     # 创建基础高度场（全零）    
     height_field = np.zeros((width_pixels, length_pixels), dtype=np.int16)    
         
     # 计算平台区域    
     platform_pixels = int(cfg.platform_width / cfg.horizontal_scale)    
     center_x = width_pixels // 2    #向下取整的整数
-    center_y = (length_pixels +offset)  // 2    
+    center_y = (length_pixels+offset) // 2    
         
     # 设置中间平台高度    
-    platform_height_pixels = int(2*(cfg.platform_height + 0.30*difficulty) / cfg.vertical_scale)    
+    platform_height_pixels = int(3*(cfg.platform_height + 0.30*difficulty) / cfg.vertical_scale)    
     x1 = center_x - platform_pixels // 2    
     x2 = center_x + platform_pixels // 2    
     y1 = center_y - platform_pixels // 2    
     y2 = center_y + platform_pixels // 2      
     height_field[x1:x2, y1:y2] = platform_height_pixels#在坐标范围内设置高度
-    fr_platform_height_pixels = int((cfg.platform_height + 0.30*difficulty) / cfg.vertical_scale)    
+
+    fr_platform_height_pixels = int(2*(cfg.platform_height + 0.30*difficulty) / cfg.vertical_scale)    
     fr_y1 = y1 - platform_pixels
+    fr_y2 = y2 + platform_pixels
     height_field[x1:x2, fr_y1:y1] = fr_platform_height_pixels
+    height_field[x1:x2, y2:fr_y2] = fr_platform_height_pixels
+    fr_platform_height_pixels_last = int(1*(cfg.platform_height + 0.30*difficulty) / cfg.vertical_scale)
+    last_y1 = fr_y1 - platform_pixels
+    last_y2 = fr_y2 + platform_pixels
+    height_field[x1:x2, last_y1:fr_y1] = fr_platform_height_pixels_last
+    height_field[x1:x2, fr_y2:last_y2] = fr_platform_height_pixels_last
     
     # 使用 ExtremeParkourRoughTerrainCfg 的粗糙度逻辑替换原有噪声
     if cfg.apply_roughness:
@@ -96,18 +105,57 @@ def centerplatform_terrain(
     # 添加边界处理
     height_field = padding_height_field_raw(height_field, cfg)
     
-    # 生成目标点 - 在平台上随机分布
+    # 生成目标点 - 按台阶分布
     goals = np.zeros((num_goals, 2))
     goal_heights = np.zeros(num_goals, dtype=np.int16)
     
-    for i in range(num_goals):
-        # 在平台区域内随机生成目标点
-        goal_x = np.random.randint(x1, x2)
-        goal_y = np.random.randint(y1, y2)
-        goals[i] = [goal_x * cfg.horizontal_scale, goal_y * cfg.horizontal_scale]
-        goal_heights[i] = height_field[goal_x, goal_y]
+    # 计算台阶中心位置和高度
+    platforms = [
+        (center_x, (last_y1 + fr_y1) // 2, fr_platform_height_pixels_last),  # 第一个台阶
+        (center_x, (fr_y1 + y1) // 2, fr_platform_height_pixels),            # 第二个台阶  
+        (center_x, (y1 + y2) // 2, platform_height_pixels),                  # 中间台阶
+        (center_x, (y2 + fr_y2) // 2, fr_platform_height_pixels),            # 第三个台阶
+        (center_x, (fr_y2 + last_y2) // 2, fr_platform_height_pixels_last),  # 最后一个台阶
+    ]
     
-    return height_field, goals, goal_heights
+    goal_index = 0
+    
+    # 第一个目标点：第一个台阶前0.5m处
+    if goal_index < num_goals:
+        first_platform_y = platforms[0][1]
+        offset_pixels = int(1. / cfg.horizontal_scale)
+        goals[goal_index] = [center_x, first_platform_y - offset_pixels]
+        goal_heights[goal_index] = heght_offset  # 地面高度
+        goal_index += 1
+    
+    # 每个台阶中心的目标点
+    for platform_x, platform_y, platform_height in platforms:
+        if goal_index < num_goals:
+            goals[goal_index] = [platform_x, platform_y]
+            goal_heights[goal_index] = platform_height +heght_offset
+            goal_index += 1
+    
+    # 倒数第二个目标点：最后台阶后0.5m处
+    if goal_index < num_goals:
+        last_platform_y = platforms[-1][1]
+        offset_pixels = int(1. / cfg.horizontal_scale)
+        goals[goal_index] = [center_x, last_platform_y + offset_pixels]
+        goal_heights[goal_index] = heght_offset  # 地面高度
+        goal_index += 1
+    
+    # 最后一个目标点：与倒数第二个相同
+    if goal_index < num_goals:
+        goals[goal_index] = goals[goal_index - 1].copy()
+        goal_heights[goal_index] = goal_heights[goal_index - 1]
+        goal_index += 1
+    
+    # 如果还有剩余目标点，都设为最后一个位置
+    while goal_index < num_goals:
+        goals[goal_index] = goals[goal_index - 1].copy()
+        goal_heights[goal_index] = goal_heights[goal_index - 1]
+        goal_index += 1
+    
+    return height_field, goals * cfg.horizontal_scale, goal_heights
 @parkour_field_to_mesh
 def gap_terrain(  
     difficulty: float, cfg: LargeGapCfg,num_goals: int,

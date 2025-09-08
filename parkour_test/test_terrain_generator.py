@@ -33,6 +33,8 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 from parkour_isaaclab.terrains.parkour_terrain_importer import ParkourTerrainImporter
 from parkour_test.utils.test_terrain_config import PARKOUR_TERRAINS_CFG
+from parkour_isaaclab.terrains.extreme_parkour.config.parkour import My_TERRAINS_CFG  # isort: skip
+
 
 
 @configclass
@@ -43,7 +45,7 @@ class TerrainSceneCfg(InteractiveSceneCfg):
         class_type= ParkourTerrainImporter,
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=PARKOUR_TERRAINS_CFG,
+        terrain_generator=My_TERRAINS_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(

@@ -76,25 +76,10 @@ My_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
     use_cache=False, 
     sub_terrains={  
         "central_platform": CenterPlatformCfg(  
-            proportion=0.0 ,  # 50%使用这种地形 
-            flat_patch_sampling={  
-                "target": FlatPatchSamplingCfg(  
-                        num_patches=1,  
-                        patch_radius=0.05,  
-                        max_height_diff=0.2,
-                        #相对于地形中心
-                        x_range=(-4.0, 4.0), y_range=(-4.0, 4.0)
-                        ),
-                "init_pos": FlatPatchSamplingCfg(  
-                        num_patches=1,  
-                        patch_radius=0.05,  
-                        max_height_diff=0.2,
-                        x_range=(-4.0, 4.0), y_range=(-4.0, 4.0)
-                        )
-                }  
+            proportion=1.0 ,  # 50%使用这种地形   
         ), 
         "parkour_flat": ExtremeParkourHurdleTerrainCfg(
-                        proportion=0.5,
+                        proportion=0.0,
                         apply_roughness=True,
                         apply_flat=True,
                         x_range = (1.2, 2.2),
@@ -102,7 +87,7 @@ My_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
                         hurdle_height_range= '0.1+0.1*difficulty, 0.15+0.15*difficulty'
                         ),
         "gap": LargeGapCfg(  
-            proportion=0.5,  # 50%使用这种地形 
+            proportion=0.0,  # 50%使用这种地形 
         ), 
     },  
     

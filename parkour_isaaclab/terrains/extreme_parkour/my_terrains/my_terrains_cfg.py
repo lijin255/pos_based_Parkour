@@ -26,7 +26,7 @@ class ExtremeParkourRoughTerrainCfg(ParkourSubTerrainBaseCfg):
 @configclass
 class CenterPlatformCfg(ExtremeParkourRoughTerrainCfg): 
     function = centerplatform_terrain 
-    platform_width: float = 1.5  
+    platform_width: float = 1.0  
     platform_height: float = 0.3  
     num_goals: int = 8
 @configclass  

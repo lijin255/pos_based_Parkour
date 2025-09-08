@@ -35,7 +35,7 @@ class ExtremeParkourObservations(ManagerTermBase):
         self.sensor_cfg = cfg.params["sensor_cfg"]
         self.asset_cfg = cfg.params["asset_cfg"]
         self.history_length = cfg.params['history_length']
-        self._obs_history_buffer = torch.zeros(self.num_envs, self.history_length, 3 + 2 + 3 + 4 + 36 + 6, device=self.device)
+        self._obs_history_buffer = torch.zeros(self.num_envs, self.history_length, 3 + 2 + 3 + 4 + 36 + 7, device=self.device)
         self.global_counter = 0 
         self.delta_yaw = torch.zeros(self.num_envs, device=self.device)
         self.delta_next_yaw = torch.zeros(self.num_envs, device=self.device)
@@ -43,7 +43,6 @@ class ExtremeParkourObservations(ManagerTermBase):
         self.env = env
         self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.body_id = self.asset.find_bodies('base')[0]
-        
     def reset(self, env_ids: Sequence[int] | None = None) -> None:
         self._obs_history_buffer[env_ids, :, :] = 0. 
         self.episode_length_buf[env_ids] = 0
@@ -71,7 +70,12 @@ class ExtremeParkourObservations(ManagerTermBase):
             self.delta_yaw = self.parkour_event.target_yaw - yaw
             self.delta_next_yaw = self.parkour_event.next_target_yaw - yaw
             self.measured_heights = self._get_heights()
-            #3 + 2 + 3 + 4 + 36 + 5 -》3 + 2 + 3 + 4 + 36 + 5（command(3)和terrain）
+        remaining_steps = self.env.max_episode_length - self.episode_length_buf  
+  
+# 获取剩余时间（秒）  
+        self.remaining_time_s = remaining_steps * env.step_dt
+        # print("remaining_time:",self.remaining_time_s)
+            #3 + 2 + 3 + 4 + 36 + 5 -》3 + 2 + 3 + 4 + 36 + 5（command(4)和terrain）,time
         commands = env.command_manager.get_command('base_goal')
         obs_buf = torch.cat((
                             self.asset.data.root_ang_vel_b * 0.25,   #[1,3] 0~2
@@ -80,7 +84,8 @@ class ExtremeParkourObservations(ManagerTermBase):
                             self.delta_yaw[:, None], #[1,1] 6
                             self.delta_next_yaw[:, None], #[1,1] 7 
                             0*commands[:, 0:2], #[1,2] 8 
-                            commands[:, 0:2],  #[1,1] 9 10已经修改
+                            commands[:, 0:2]*0.1,  #[1,1] 9 10已经修改
+                            (self.remaining_time_s*0.1).unsqueeze(1),
                             env_idx_tensor,#是什么（4）
                             invert_env_idx_tensor,
                             self.asset.data.joint_pos - self.asset.data.default_joint_pos,
@@ -90,7 +95,7 @@ class ExtremeParkourObservations(ManagerTermBase):
                             ),dim=-1)
         priv_explicit = self._get_priv_explicit()
         priv_latent = self._get_priv_latent()
-        observations = torch.cat([obs_buf, #53
+        observations = torch.cat([obs_buf, #53+1
                                   self.measured_heights, #132
                                   priv_explicit, # 9
                                   priv_latent, # 29
